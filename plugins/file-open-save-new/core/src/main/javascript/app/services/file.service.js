@@ -25,15 +25,15 @@
 define(
     [
       "pentaho/i18n-osgi!file-open-save-new.messages",
-      "./services.service",
+      "./provider.service",
       "./helper.service",
       "./modal.service",
       "../components/utils"
     ],
-    function (i18n, servicesService, helperService, modalService, utils) {
+    function (i18n, providerService, helperService, modalService, utils) {
       "use strict";
 
-      var factoryArray = [servicesService.name, helperService.name, modalService.name, "$q", "$interval", "$timeout", factory];
+      var factoryArray = [providerService.name, helperService.name, modalService.name, "$q", "$interval", "$timeout", factory];
       var module = {
         name: "fileService",
         factory: factoryArray
@@ -46,16 +46,18 @@ define(
        *
        * @return {Object} The fileService api
        */
-      function factory(ss, helperService, modalService, $q, $interval, $timeout) {
+      function factory(providerService, helperService, modalService, $q, $interval, $timeout) {
         var baseUrl = "/cxf/browser-new";
         return {
+          files: [],
           deleteFiles: deleteFiles,
           renameFile: renameFile,
           moveFiles: moveFiles,
           copyFiles: copyFiles,
           isCopy: isCopy,
           open: open,
-          save: save
+          save: save,
+          get: get
         };
 
         /**
@@ -66,7 +68,7 @@ define(
          */
         function deleteFiles(folder, files) {
           return $q(function (resolve, reject) {
-            ss.get(folder.provider).deleteFiles(files).then(function (response) {
+            providerService.get(folder.provider).deleteFiles(files).then(function (response) {
               // TODO: Smart cleanup
               var deletedFolders = response.data.data;
               for (var i = 0; i < deletedFolders.length; i++) {
@@ -95,7 +97,7 @@ define(
          */
         function renameFile(file, newPath) {
           return $q(function (resolve, reject) {
-            ss.get(file.provider).renameFile(file, newPath).then(function (response) {
+            providerService.get(file.provider).renameFile(file, newPath).then(function (response) {
               var result = response.data;
               if (result.status === "SUCCESS") {
                 resolve(result);
@@ -109,33 +111,14 @@ define(
         }
 
         function _getOverwrite(result) {
-          var overwrite = "";
-          if (result.values['apply-all']) {
-            switch (result.button) {
-              case "rename":
-                overwrite = "rename_all";
-                break;
-              case "overwrite":
-                overwrite = "all";
-                break;
-              case "skip":
-                overwrite = "skip_all";
-                break;
-            }
-          } else {
-            switch (result.button) {
-              case "rename":
-                overwrite = "rename_one";
-                break;
-              case "overwrite":
-                overwrite = "one";
-                break;
-              case "skip":
-                overwrite = "skip";
-                break;
-            }
+          switch (result.button) {
+            case "replace":
+              return result.values['apply-all'] ? "replace_all" : "replace_one";
+            case "stop":
+              return "stop";
+            case "keep":
+              return result.values['apply-all'] ? "keep_all" : "keep_one";
           }
-          return overwrite;
         }
 
         function handleFileExistsCheck(to, newPath) {
@@ -185,7 +168,7 @@ define(
          * @returns {Promise}
          */
         function copyFile(from, to, path, overwrite) {
-          handleProgressModal(i18n.get('file-open-save-plugin.copying.message'), "Copying file " + from.path + " to " + path);
+          handleProgressModal(i18n.get('file-open-save-plugin.copying.message'), "Copying " + from.path + " to " + path);
           return helperService.httpPost([baseUrl, "copy"].join("/") + "?overwrite=" + overwrite + "&path=" + path, {
             from: from,
             to: to
@@ -213,7 +196,7 @@ define(
          * @returns {Promise}
          */
         function moveFile(from, to, path, overwrite) {
-          handleProgressModal(i18n.get('file-open-save-plugin.moving.message'), "Moving file " + from.path + " to " + path);
+          handleProgressModal(i18n.get('file-open-save-plugin.moving.message'), "Moving " + from.path + " to " + path);
           return helperService.httpPost([baseUrl, "move"].join("/") + "?overwrite=" + overwrite + "&path=" + path, {
             from: from,
             to: to
@@ -232,21 +215,18 @@ define(
           }
           var filename = utils.getFilename(from[index].path);
           var newPath = to.path + "/" + filename;
+          console.log(overwrite);
           switch (overwrite) {
-            case "one":
-              console.log("one");
+            case "replace_one":
               overwrite = "";
-            case "all":
-              console.log("all");
+            case "replace_all":
               operation(from[index], to, newPath, true).then(function (result) {
                 startOperation(from, to, ++index, operation, overwrite, resolve, reject);
               });
               break;
-            case "rename_one":
-              console.log("rename_one");
+            case "keep_one":
               overwrite = "";
-            case "rename_all":
-              console.log("rename_all");
+            case "keep_all":
               helperService.httpPost([baseUrl, "getNewName"].join("/") + "?newPath=" + newPath, to).then(function (result) {
                 var renamedPath = result.data.data;
                 operation(from[index], to, renamedPath, true).then(function (result) {
@@ -254,9 +234,7 @@ define(
                 });
               });
               break;
-            case "skip":
-              overwrite = "";
-            case "skip_all":
+            case "stop":
               startOperation(from, to, ++index, operation, overwrite, resolve, reject);
               break;
             case "":
@@ -283,7 +261,7 @@ define(
          * @returns {*}
          */
         function isCopy(from, to) {
-          return ss.get(from.provider).isCopy(from, to) && ss.get(to.provider).isCopy(from, to);
+          return providerService.get(from.provider).isCopy(from, to) && providerService.get(to.provider).isCopy(from, to);
         }
 
         //TODO: Add a rename function to folders so I can traverse and rename
@@ -318,22 +296,34 @@ define(
         }
 
         function open(file) {
-          ss.get(file.provider).open(file);
+          providerService.get(file.provider).open(file);
         }
 
         function save(filename, folder, currentFilename, override) {
           helperService.httpPost([baseUrl, "clearCache"].join("/"), folder);
-          return ss.get(folder.provider).save(filename, folder, currentFilename, override);
+          return providerService.get(folder.provider).save(filename, folder, currentFilename, override);
         }
 
-        /**
-         * Checks if the file name is valid or not. An invalid name contains forward or backward slashes
-         * @returns {boolean} - true if the name is invalid, false otherwise
-         * @private
-         */
-        function _hasInvalidChars(name) {
-          return name.match(/[\\\/]/g) !== null;
+        function browse(path) {
+          helperService.httpPost([baseUrl, "rename"].join("/") + "?newPath=" + newPath, file).then(function (response) {
+            file.path = newPath;
+          });
         }
+
+        function get(file) {
+          var service = providerService.getByPath(file.path);
+          if (service) {
+            file.provider = service.provider;
+          }
+          return $q(function(resolve, reject) {
+            helperService.httpPost([baseUrl, "getFile"].join("/"), file).then(function (response) {
+              resolve(response.data);
+            }).catch(function(e) {
+              reject(e);
+            });
+          })
+        }
+
       }
     }
 );

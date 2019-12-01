@@ -33,9 +33,11 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableItem;
-import org.pentaho.di.core.row.value.ValueMetaFactory;
+import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.di.core.row.value.ValueMetaBase;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.i18n.BaseMessages;
+import org.pentaho.di.trans.step.jms.JmsConsumerMeta;
 import org.pentaho.di.ui.core.PropsUI;
 import org.pentaho.di.ui.core.widget.ColumnInfo;
 import org.pentaho.di.ui.core.widget.TableView;
@@ -46,10 +48,11 @@ import static org.pentaho.di.trans.step.jms.JmsConstants.PKG;
 
 public class FieldsTab {
 
+  public static final String STRING_DESC = ValueMetaBase.getTypeDesc( ValueMetaInterface.TYPE_STRING );
 
   private CTabFolder wTabFolder;
   private PropsUI props;
-  private TableView fieldsTable;
+  TableView fieldsTable;
   private VariableSpace transMeta;
   private ModifyListener lsMod;
   private String message;
@@ -58,17 +61,17 @@ public class FieldsTab {
   private String jmsTimestamp;
   private String jmsRedelivered;
 
-  public FieldsTab( CTabFolder wTabFolder, PropsUI props,
-                    VariableSpace transMeta, ModifyListener lsMod, String message, String destination, String messageId, String jmsTimestamp, String jmsRedelivered ) {
+  public FieldsTab(
+    CTabFolder wTabFolder, PropsUI props, VariableSpace transMeta, ModifyListener lsMod, JmsConsumerMeta jmsMeta ) {
     this.wTabFolder = wTabFolder;
     this.props = props;
     this.transMeta = transMeta;
     this.lsMod = lsMod;
-    this.message = message;
-    this.destination = destination;
-    this.messageId = messageId;
-    this.jmsTimestamp = jmsTimestamp;
-    this.jmsRedelivered = jmsRedelivered;
+    this.message = jmsMeta.messageField;
+    this.destination = jmsMeta.destinationField;
+    this.messageId = jmsMeta.messageId;
+    this.jmsTimestamp = jmsMeta.jmsTimestamp;
+    this.jmsRedelivered = jmsMeta.jmsRedelivered;
   }
 
   public void buildFieldsTab() {
@@ -144,27 +147,27 @@ public class FieldsTab {
     TableItem messageItem = fieldsTable.getTable().getItem( 0 );
     messageItem.setText( 1, BaseMessages.getString( PKG, "JmsConsumerDialog.InputName.Message" ) );
     messageItem.setText( 2, message );
-    messageItem.setText( 3, "String" );
+    messageItem.setText( 3, STRING_DESC );
 
     TableItem topicItem = fieldsTable.getTable().getItem( 1 );
     topicItem.setText( 1, BaseMessages.getString( PKG, "JmsConsumerDialog.InputName.Destination" ) );
     topicItem.setText( 2, destination );
-    topicItem.setText( 3, "String" );
+    topicItem.setText( 3, STRING_DESC );
 
     TableItem messageIdItem = fieldsTable.getTable().getItem( 2 );
     messageIdItem.setText( 1, BaseMessages.getString( PKG, "JmsConsumerDialog.InputName.MessageId" ) );
     messageIdItem.setText( 2, messageId );
-    messageIdItem.setText( 3, "String" );
+    messageIdItem.setText( 3, STRING_DESC );
 
     TableItem jmsTimestampIdItem = fieldsTable.getTable().getItem( 3 );
     jmsTimestampIdItem.setText( 1, BaseMessages.getString( PKG, "JmsConsumerDialog.InputName.JMSTimestamp" ) );
     jmsTimestampIdItem.setText( 2, jmsTimestamp );
-    jmsTimestampIdItem.setText( 3, "String" );
+    jmsTimestampIdItem.setText( 3, STRING_DESC );
 
     TableItem jmsRedeliveredItem = fieldsTable.getTable().getItem( 4 );
     jmsRedeliveredItem.setText( 1, BaseMessages.getString( PKG, "JmsConsumerDialog.InputName.JMSRedelivered" ) );
     jmsRedeliveredItem.setText( 2, jmsRedelivered );
-    jmsRedeliveredItem.setText( 3, "String" );
+    jmsRedeliveredItem.setText( 3, STRING_DESC );
   }
 
   private ColumnInfo[] getFieldColumns() {
@@ -179,14 +182,4 @@ public class FieldsTab {
 
     return new ColumnInfo[] { referenceName, name, type };
   }
-
-  public String[] getFieldNames() {
-    return stream( fieldsTable.getTable().getItems() ).map( row -> row.getText( 2 ) ).toArray( String[]::new );
-  }
-
-  public int[] getFieldTypes() {
-    return stream( fieldsTable.getTable().getItems() )
-      .mapToInt( row -> ValueMetaFactory.getIdForValueMeta( row.getText( 3 ) ) ).toArray();
-  }
-
 }

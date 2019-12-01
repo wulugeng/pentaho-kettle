@@ -69,10 +69,14 @@ define([
     vm.canPaste = canPaste;
     vm.onRightClick = onRightClick;
     vm.onDeleteFolder = onDeleteFolder;
+    vm.onBodyClick = onBodyClick;
+    vm.onKeyDown = onKeyDown;
+    vm.onKeyUp = onKeyUp;
     vm.width = 0;
     vm.state = $state;
     vm.getId = getId;
     vm.targetFolder = null;
+    vm.errorType = 0;
 
     /**
      * Called whenever one-way bindings are updated.
@@ -84,6 +88,33 @@ define([
       if (changes.selectedFolder) {
         _setWidth();
       }
+    }
+
+    function onBodyClick(e, id) {
+      var parentNode = e.target.parentNode;
+      var found = false;
+      while (parentNode) {
+        if (parentNode.id === id) {
+          found = true;
+          break;
+        }
+        parentNode = parentNode.parentNode;
+      }
+      if (!found) {
+        vm.targetFolder = null;
+      }
+    }
+
+    function onKeyDown(event) {
+      if (event.target.tagName !== "INPUT") {
+        if (event.keyCode === 27) {
+          vm.targetFolder = null;
+        }
+      }
+    }
+
+    function onKeyUp(event) {
+      // Ignored
     }
 
     function getTree() {
@@ -103,18 +134,12 @@ define([
      *
      * @param {Object} folder - folder object
      */
-    function openFolder(folder, callback) {
+    function openFolder(folder) {
       folder.open = !folder.open;
-      vm.onOpen({openFolder: folder}).then(function () {
-        _setWidth();
-      });
-    }
-
-    function _setFolder(folder) {
-      vm.width = 0;
-      folder.open = folder.open !== true;
-      if (folder.open === false) {
-        folder.loading = false;
+      if (folder.open) {
+        vm.onOpen({openFolder: folder}).then(function () {
+          _setWidth();
+        });
       }
     }
 
@@ -124,6 +149,7 @@ define([
      * @param {Object} folder - folder object
      */
     function selectFolder(folder) {
+      vm.targetFolder = null;
       vm.onSelect({selectedFolder: folder});
     }
 
@@ -135,48 +161,6 @@ define([
     function selectAndOpenFolder(folder) {
       selectFolder(folder);
       openFolder(folder);
-    }
-
-    /**
-     * Selects a folder by path
-     * @param {String} path - Path to folder
-     * @private
-     */
-    function _openFolderTree(path) {
-      vm.tree.children[0].name = "/";
-      path = path === "/" ? "" : path;
-      var parts = path.split("/");
-      parts[0] = "/";
-      var index = 0;
-      _findAndOpenFolder(vm.tree.children, index, parts, function () {
-        // If the folder contents have loaded before the tree we want to use that object's children
-        if (vm.selectedFolder && vm.selectedFolder.path === path) {
-          var folder = _findFolderByPath(path);
-          folder.children = vm.selectedFolder.children;
-          selectFolder(folder);
-        } else {
-          _selectFolderByPath(path);
-        }
-      });
-    }
-
-    function _findAndOpenFolder(children, index, parts, callback) {
-      if (parts.length === 1) {
-        if (callback) {
-          callback();
-        }
-        return;
-      }
-      if (children[index].name === parts[0]) {
-        if (parts.length >= 1) {
-          parts.shift();
-          openFolder(children[index], function () {
-            _findAndOpenFolder(children[index].children, 0, parts, callback);
-          });
-        }
-      } else {
-        _findAndOpenFolder(children, ++index, parts, callback);
-      }
     }
 
     /**
